@@ -159,7 +159,6 @@ def waste_classification_page(classifier, image_processor):
                     confidence = classifier.get_confidence_score(description)
                     
                     st.success(f"**Material Type:** {result.title()}")
-                    st.info(f"**Confidence Score:** {confidence:.1%}")
                     
                     # Show classification details
                     details = classifier.get_classification_details(result)
@@ -277,7 +276,7 @@ def recommendation_engine_page(classifier, database, carbon_calc, economic_analy
     
     # Detailed recommendations
     for i, rec in enumerate(recommendations):
-        with st.expander(f"Strategy {i+1}: {rec['action'].title()} - Viability Score: {rec['viability_score']}/10"):
+        with st.expander(f"Strategy {i+1}: {rec['action'].title()} - Viability Score: {rec['viability_score']:.2f}/10"):
             col1, col2 = st.columns([2, 1])
             
             with col1:

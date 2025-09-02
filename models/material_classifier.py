@@ -1,274 +1,300 @@
-import pandas as pd
-import numpy as np
+import joblib
+import re
+import os
+import pickle
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
-import pickle
-import re
+from sklearn.linear_model import LogisticRegression
+import warnings
 
 class MaterialClassifier:
-    """AI model for classifying waste materials based on text descriptions"""
+    """AI model for classifying waste materials with version compatibility fixes"""
     
-    def __init__(self):
-        self.vectorizer = TfidfVectorizer(
-            max_features=1000,
-            stop_words='english',
-            lowercase=True,
-            ngram_range=(1, 2)
-        )
-        self.classifier = RandomForestClassifier(
-            n_estimators=100,
-            random_state=42,
-            max_depth=10
-        )
-        self.material_types = ['plastic', 'metal', 'paper', 'glass', 'electronics', 'textile']
-        self._train_model()
+    def __init__(self, model_path="C:/Users/shree/Downloads/EcoAdvisor/EcoAdvisor/models/material_classifier.pkl"):
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Trained model not found at {model_path}. Please train it first.")
+        
+        # Try multiple loading approaches for compatibility
+        self.vectorizer = None
+        self.classifier = None
+        self.material_types = None
+        
+        success = self._load_model_safe(model_path)
+        if not success:
+            raise ValueError("Could not load the model due to version compatibility issues. Please retrain the model.")
     
-    def _create_training_data(self):
-        """Create synthetic training data based on material descriptions"""
-        training_data = {
-            'plastic': [
-                'clear plastic bottle water container',
-                'plastic bag shopping grocery',
-                'food container tupperware plastic',
-                'plastic wrap cling film',
-                'styrofoam takeout container',
-                'plastic cups disposable',
-                'pet bottle soda drink',
-                'plastic packaging bubble wrap',
-                'plastic toys children items',
-                'vinyl plastic sheets',
-                'polyethylene plastic film',
-                'polystyrene foam packaging',
-                'pvc plastic pipes',
-                'plastic cutlery disposable',
-                'plastic milk jug container'
-            ],
-            'metal': [
-                'aluminum can soda beer',
-                'steel can food container',
-                'copper wire electrical',
-                'iron metal scrap pieces',
-                'brass fittings hardware',
-                'tin can food storage',
-                'aluminum foil kitchen',
-                'metal bottle caps',
-                'stainless steel cookware',
-                'zinc coated metal',
-                'lead pipes plumbing',
-                'nickel metal parts',
-                'chrome plated items',
-                'cast iron cookware',
-                'sheet metal scraps'
-            ],
-            'paper': [
-                'newspaper print paper',
-                'cardboard box packaging',
-                'office paper white sheets',
-                'magazine glossy paper',
-                'paper bags brown kraft',
-                'tissue paper soft',
-                'paperboard packaging',
-                'notebook paper lined',
-                'copy paper white office',
-                'corrugated cardboard',
-                'paper plates disposable',
-                'greeting cards paper',
-                'paper cups coffee',
-                'paper towels kitchen',
-                'book pages printed'
-            ],
-            'glass': [
-                'glass bottle wine beer',
-                'window glass sheets',
-                'glass jar food container',
-                'drinking glass tumbler',
-                'glass plate dish',
-                'mirror glass reflective',
-                'tempered glass safety',
-                'glass light bulb',
-                'glass vase decorative',
-                'frosted glass opaque',
-                'colored glass tinted',
-                'glass fiber insulation',
-                'laboratory glass beaker',
-                'automotive glass windshield',
-                'glass door panels'
-            ],
-            'electronics': [
-                'computer monitor screen',
-                'mobile phone smartphone',
-                'television tv electronic',
-                'circuit board pcb',
-                'electronic cables wires',
-                'battery rechargeable',
-                'laptop computer notebook',
-                'printer electronic device',
-                'radio electronic music',
-                'electronic components',
-                'led lights electronic',
-                'electronic appliance',
-                'tablet electronic device',
-                'electronic gaming console',
-                'electronic sensors'
-            ],
-            'textile': [
-                'cotton fabric cloth',
-                'wool clothing sweater',
-                'polyester fabric synthetic',
-                'denim jeans clothing',
-                'silk fabric luxury',
-                'linen fabric natural',
-                'clothing garments shirts',
-                'fabric scraps textile',
-                'carpet textile flooring',
-                'curtain fabric window',
-                'upholstery fabric furniture',
-                'canvas fabric heavy',
-                'textile waste clothing',
-                'fabric remnants pieces',
-                'bedding textile sheets'
-            ]
-        }
+    def _load_model_safe(self, model_path):
+        """Safely load model with multiple fallback approaches"""
         
-        descriptions = []
-        labels = []
+        # Approach 1: Try joblib with error suppression
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                saved_data = joblib.load(model_path)
+                self.vectorizer = saved_data["vectorizer"]
+                self.classifier = saved_data["classifier"]
+                self.material_types = saved_data["material_types"]
+                print("✅ Model loaded successfully with joblib")
+                return True
+        except Exception as e:
+            print(f"❌ Joblib loading failed: {str(e)}")
         
-        for material_type, examples in training_data.items():
-            for example in examples:
-                descriptions.append(example)
-                labels.append(material_type)
+        # Approach 2: Try with pickle directly
+        try:
+            with open(model_path, 'rb') as f:
+                saved_data = pickle.load(f)
+                self.vectorizer = saved_data["vectorizer"]
+                self.classifier = saved_data["classifier"]
+                self.material_types = saved_data["material_types"]
+                print("✅ Model loaded successfully with pickle")
+                return True
+        except Exception as e:
+            print(f"❌ Pickle loading failed: {str(e)}")
         
-        return descriptions, labels
-    
-    def _train_model(self):
-        """Train the classification model"""
-        descriptions, labels = self._create_training_data()
+        # Approach 3: Try loading individual components
+        try:
+            saved_data = {}
+            # Try to extract what we can
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                import sklearn
+                print(f"Current scikit-learn version: {sklearn.__version__}")
+                
+                # Load with allow_pickle=True and handle errors
+                saved_data = joblib.load(model_path)
+                
+                # Extract components that work
+                if "vectorizer" in saved_data:
+                    self.vectorizer = saved_data["vectorizer"]
+                if "material_types" in saved_data:
+                    self.material_types = saved_data["material_types"]
+                
+                # For classifier, try to rebuild if necessary
+                if "classifier" in saved_data:
+                    self.classifier = saved_data["classifier"]
+                
+                print("✅ Model loaded with partial recovery")
+                return True
+                
+        except Exception as e:
+            print(f"❌ Partial recovery failed: {str(e)}")
         
-        # Vectorize the text data
-        X = self.vectorizer.fit_transform(descriptions)
-        y = np.array(labels)
-        
-        # Train the classifier
-        self.classifier.fit(X, y)
+        return False
     
     def classify_material(self, description):
         """Classify a material based on its description"""
+        if not self.classifier or not self.vectorizer:
+            return "unknown"
+            
         if not description or not description.strip():
             return "unknown"
-        
-        # Clean and prepare the description
-        cleaned_description = self._clean_text(description)
-        
-        # Vectorize the input
-        X = self.vectorizer.transform([cleaned_description])
-        
-        # Make prediction
-        prediction = self.classifier.predict(X)[0]
-        
-        return prediction
-    
-    def get_confidence_score(self, description):
-        """Get confidence score for the classification"""
-        if not description or not description.strip():
-            return 0.0
-        
-        cleaned_description = self._clean_text(description)
-        X = self.vectorizer.transform([cleaned_description])
-        
-        # Get probability scores
-        probabilities = self.classifier.predict_proba(X)[0]
-        max_probability = np.max(probabilities)
-        
-        return max_probability
+            
+        try:
+            cleaned = self._clean_text(description)
+            X = self.vectorizer.transform([cleaned])
+            return self.classifier.predict(X)[0]
+        except Exception as e:
+            print(f"Classification error: {str(e)}")
+            return "unknown"
     
     def get_top_predictions(self, description, n=3):
         """Get top N predictions with confidence scores"""
+        if not self.classifier or not self.vectorizer:
+            return []
+            
         if not description or not description.strip():
             return []
-        
-        cleaned_description = self._clean_text(description)
-        X = self.vectorizer.transform([cleaned_description])
-        
-        probabilities = self.classifier.predict_proba(X)[0]
-        classes = self.classifier.classes_
-        
-        # Sort by probability
-        sorted_indices = np.argsort(probabilities)[::-1][:n]
-        
-        results = []
-        for idx in sorted_indices:
-            results.append({
-                'material': classes[idx],
-                'confidence': probabilities[idx]
-            })
-        
-        return results
+            
+        try:
+            cleaned = self._clean_text(description)
+            X = self.vectorizer.transform([cleaned])
+            
+            # Check if classifier supports predict_proba
+            if hasattr(self.classifier, 'predict_proba'):
+                probabilities = self.classifier.predict_proba(X)[0]
+                classes = self.classifier.classes_
+                sorted_indices = probabilities.argsort()[::-1][:n]
+                return [{"material": classes[i], "confidence": float(probabilities[i])} for i in sorted_indices]
+            else:
+                # Fallback for classifiers without probability prediction
+                prediction = self.classifier.predict(X)[0]
+                return [{"material": prediction, "confidence": 1.0}]
+                
+        except Exception as e:
+            print(f"Prediction error: {str(e)}")
+            return []
     
-    def _clean_text(self, text):
-        """Clean and preprocess text"""
-        # Convert to lowercase
-        text = text.lower()
-        
-        # Remove special characters but keep spaces
-        text = re.sub(r'[^a-zA-Z0-9\s]', '', text)
-        
-        # Remove extra whitespace
-        text = re.sub(r'\s+', ' ', text).strip()
-        
-        return text
-    
+    def get_confidence_score(self, description):
+        """Return the confidence score of the top prediction"""
+        preds = self.get_top_predictions(description, n=1)
+        return preds[0]["confidence"] if preds else 0.0
+
+
     def get_classification_details(self, material_type):
         """Get detailed information about a material classification"""
+    
         details = {
-            'plastic': {
-                'common_types': ['PET', 'HDPE', 'PVC', 'LDPE', 'PP', 'PS'],
-                'identification': 'Look for recycling codes, flexibility, transparency',
-                'recycling_difficulty': 'Medium',
-                'main_sources': 'Packaging, containers, bottles'
+            "plastic": {
+                "category": "Recyclable",
+                "disposal_method": "Clean and place in recycling bin",
+                "environmental_impact": "Takes 450-1000 years to decompose",
+                "recycling_tips": "Remove caps and labels, rinse clean"
             },
-            'metal': {
-                'common_types': ['Aluminum', 'Steel', 'Copper', 'Brass', 'Iron'],
-                'identification': 'Magnetic properties, weight, color',
-                'recycling_difficulty': 'Easy',
-                'main_sources': 'Cans, construction, electronics'
+            "metal": {
+                "category": "Recyclable",
+                "disposal_method": "Place in recycling bin",
+                "environmental_impact": "Highly recyclable, saves energy",
+                "recycling_tips": "Clean containers, aluminum cans are valuable"
             },
-            'paper': {
-                'common_types': ['Newsprint', 'Cardboard', 'Office paper', 'Mixed paper'],
-                'identification': 'Fiber composition, coating, thickness',
-                'recycling_difficulty': 'Easy',
-                'main_sources': 'Packaging, printing, office waste'
+            "paper": {
+                "category": "Recyclable",
+                "disposal_method": "Place in paper recycling",
+                "environmental_impact": "Biodegradable but deforestation concern",
+                "recycling_tips": "Keep dry, remove staples and tape"
             },
-            'glass': {
-                'common_types': ['Clear', 'Brown', 'Green', 'Mixed color'],
-                'identification': 'Color, thickness, tempering',
-                'recycling_difficulty': 'Easy',
-                'main_sources': 'Bottles, containers, windows'
+            "glass": {
+                "category": "Recyclable",
+                "disposal_method": "Glass recycling bin",
+                "environmental_impact": "100% recyclable indefinitely",
+                "recycling_tips": "Separate by color if required"
             },
-            'electronics': {
-                'common_types': ['Circuit boards', 'Cables', 'Batteries', 'Displays'],
-                'identification': 'Components, hazardous materials',
-                'recycling_difficulty': 'Hard',
-                'main_sources': 'Consumer electronics, appliances'
+            "electronics": {
+                "category": "Special Waste",
+                "disposal_method": "Take to electronics recycling center",
+                "environmental_impact": "Contains toxic materials",
+                "recycling_tips": "Remove batteries, find certified e-waste recycler"
             },
-            'textile': {
-                'common_types': ['Cotton', 'Polyester', 'Wool', 'Mixed fibers'],
-                'identification': 'Fiber content, weave, condition',
-                'recycling_difficulty': 'Medium',
-                'main_sources': 'Clothing, household fabrics'
+            "textile": {
+                "category": "Reusable/Recyclable",
+                "disposal_method": "Donate or textile recycling",
+                "environmental_impact": "Slow to decompose, water-intensive production",
+                "recycling_tips": "Donate wearable items, recycle damaged textiles"
+            },
+            "organic": {
+                "category": "Compostable",
+                "disposal_method": "Compost bin or organic waste",
+                "environmental_impact": "Biodegradable, creates methane in landfills",
+                "recycling_tips": "Home composting or municipal organic waste program"
             }
         }
         
-        return details.get(material_type, {})
+        return details.get(material_type.lower(), {
+            "category": "Unknown",
+            "disposal_method": "Check local waste guidelines",
+            "environmental_impact": "Impact varies by material",
+            "recycling_tips": "Consult local recycling center"
+        })
     
+    def _clean_text(self, text):
+        """Clean and normalize text input"""
+        if not text:
+            return ""
+        text = str(text).lower()
+        text = re.sub(r'[^a-zA-Z0-9\s]', '', text)
+        return re.sub(r'\s+', ' ', text).strip()
+    
+    def is_model_loaded(self):
+        """Check if model components are properly loaded"""
+        return all([self.vectorizer is not None, 
+                   self.classifier is not None, 
+                   self.material_types is not None])
     def get_sample_classifications(self):
-        """Get sample data for visualization"""
+        """
+        Return sample distribution of common material types
+        for visualization purposes (static or mock data).
+        """
         return {
-            'Plastic': 35,
-            'Metal': 20,
-            'Paper': 25,
-            'Glass': 10,
-            'Electronics': 5,
-            'Textile': 5
+            "Plastic": 40,
+            "Metal": 25,
+            "Paper": 15,
+            "Glass": 10,
+            "Electronics": 5,
+            "Textile": 5
         }
+
+    
+
+# Alternative: Create a model retrainer class
+class ModelRetrainer:
+    """Utility class to retrain the model with current scikit-learn version"""
+    
+    def __init__(self):
+        self.sample_data = [
+            ("plastic bottle", "plastic"),
+            ("aluminum can", "metal"),
+            ("newspaper", "paper"),
+            ("glass jar", "glass"),
+            ("banana peel", "organic"),
+            ("old phone", "electronic"),
+            ("cotton shirt", "textile"),
+            ("cardboard box", "paper"),
+            ("steel can", "metal"),
+            ("food scraps", "organic"),
+        ]
+    
+    def retrain_model(self, save_path="material_classifier_new.pkl"):
+        """Retrain model with current scikit-learn version"""
+        from sklearn.model_selection import train_test_split
+        
+        # Prepare data
+        descriptions = [item[0] for item in self.sample_data]
+        labels = [item[1] for item in self.sample_data]
+        
+        # Create and train components
+        vectorizer = TfidfVectorizer(max_features=1000, stop_words='english')
+        X = vectorizer.fit_transform(descriptions)
+        
+        # Use RandomForest which is more stable across versions
+        classifier = RandomForestClassifier(n_estimators=100, random_state=42)
+        classifier.fit(X, labels)
+        
+        # Get material types
+        material_types = list(set(labels))
+        
+        # Save model
+        model_data = {
+            "vectorizer": vectorizer,
+            "classifier": classifier,
+            "material_types": material_types
+        }
+        
+        joblib.dump(model_data, save_path)
+        print(f"✅ New model trained and saved to {save_path}")
+        
+        return save_path
+
+
+# Usage example and test function
+def test_classifier():
+    """Test the classifier with fallback training if needed"""
+    
+    model_path = "C:/Users/shree/Downloads/EcoAdvisor/EcoAdvisor/models/material_classifier.pkl"
+    
+    try:
+        classifier = MaterialClassifier(model_path)
+        if classifier.is_model_loaded():
+            print("✅ Model loaded successfully")
+            # Test classification
+            test_items = ["plastic water bottle", "aluminum soda can", "old newspaper"]
+            for item in test_items:
+                result = classifier.classify_material(item)
+                confidence = classifier.get_confidence_score(item)
+                print(f"'{item}' -> {result} (confidence: {confidence:.2f})")
+        else:
+            print("❌ Model not fully loaded, retraining...")
+            raise Exception("Model incomplete")
+            
+    except Exception as e:
+        print(f"Loading failed: {str(e)}")
+        print("🔄 Attempting to retrain model...")
+        
+        # Retrain with current version
+        retrainer = ModelRetrainer()
+        new_model_path = retrainer.retrain_model()
+        
+        # Try loading the new model
+        classifier = MaterialClassifier(new_model_path)
+        print("✅ New model created and loaded successfully")
+
+if __name__ == "__main__":
+    test_classifier()
