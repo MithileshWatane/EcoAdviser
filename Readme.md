@@ -4,6 +4,10 @@ EcoAdviser is an AI-powered platform designed to help industries make smarter de
 
 ---
 
+<p align="center">
+  <img src="./assets/1.png" alt="Material Analysis" />
+</p>
+
 ## 🌍 Problem Statement
 
 Every day, companies generate tons of waste but lack smart tools to determine whether to:
