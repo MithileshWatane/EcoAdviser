@@ -15,7 +15,7 @@ from collections import Counter
 class ImprovedModelRetrainer:
     """Improved material classifier retrainer with better validation and overfitting prevention"""
     
-    def __init__(self, csv_path="synthetic_waste_dataset.csv"):
+    def __init__(self, csv_path="D:\EcoAdvisor\EcoAdvisor\Waste_dataset.csv"):
         self.csv_path = csv_path
         self.vectorizer = None
         self.classifier = None
@@ -368,7 +368,7 @@ class ImprovedModelRetrainer:
 def main():
     """Main function with improved error handling"""
     
-    csv_file = "C:/Users/shree/Downloads/EcoAdvisor/EcoAdvisor/synthetic_waste_dataset.csv"
+    csv_file = "D:\EcoAdvisor\EcoAdvisor\Waste_dataset.csv"
     model_save_path = "C:/Users/shree/Downloads/EcoAdvisor/EcoAdvisor/models/material_classifier.pkl"
     
     print("🚀 Starting Improved Material Classifier Training")
